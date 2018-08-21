@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/pkg/errors"
@@ -21,7 +22,7 @@ type NetworkResult struct {
 }
 
 func externalIP() (string, error) {
-	resp, err := http.Get("http://ipv6.lookup.test-ipv6.com/ip/")
+	resp, err := http.Get("http://ipv4.lookup.test-ipv6.com/ip/")
 	if err != nil {
 		return "", err
 	}
@@ -34,6 +35,7 @@ func externalIP() (string, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return "", errors.Wrap(err, "failed to decode result from IP lookups")
 	}
+	fmt.Println(res)
 
 	return res.IP, nil
 }
