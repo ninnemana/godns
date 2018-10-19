@@ -1,7 +1,7 @@
 package service
 
 import (
-	"encoding/json"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/pkg/errors"
@@ -21,7 +21,7 @@ type NetworkResult struct {
 }
 
 func externalIP() (string, error) {
-	resp, err := http.Get("http://ipv6.lookup.test-ipv6.com/ip/")
+	resp, err := http.Get("http://ifconfig.me/ip")
 	if err != nil {
 		return "", err
 	}
@@ -29,11 +29,12 @@ func externalIP() (string, error) {
 	if resp.StatusCode > 299 {
 		return "", errors.Errorf("failed to make IP lookup, failed with status code '%d'", resp.StatusCode)
 	}
+	defer resp.Body.Close()
 
-	var res NetworkResult
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return "", errors.Wrap(err, "failed to decode result from IP lookups")
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read body")
 	}
 
-	return res.IP, nil
+	return string(data), nil
 }
