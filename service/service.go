@@ -20,7 +20,7 @@ var (
 	envUser     = "GDNS_USER"
 	envPass     = "GDNS_PASSWD"
 	envInterval = "GDNS_INTERVAL"
-	envHostname = "GDNS_HOSTNAME"
+	envHostname = "GDNS_HOSTS"
 )
 
 // New validates that the required system settings
@@ -68,47 +68,49 @@ func (s *Service) Run() error {
 			return errors.Wrap(err, "failed to get local IP address")
 		}
 
-		// set the request parameters
-		q := url.Values{}
-		q.Add("hostname", os.Getenv(envHostname))
-		q.Add("myip", ip)
+		for _, h := range strings.Split(envHostname, ",") {
+			// set the request parameters
+			q := url.Values{}
+			q.Add("hostname", h)
+			q.Add("myip", ip)
 
-		req, err := http.NewRequest(
-			http.MethodPost,
-			"https://domains.google.com/nic/update",
-			nil,
-		)
-		if err != nil {
-			return errors.Wrap(err, "failed to create request")
-		}
+			req, err := http.NewRequest(
+				http.MethodPost,
+				"https://domains.google.com/nic/update",
+				nil,
+			)
+			if err != nil {
+				return errors.Wrap(err, "failed to create request")
+			}
 
-		req.URL.RawQuery = q.Encode()
+			req.URL.RawQuery = q.Encode()
 
-		auth := base64.StdEncoding.EncodeToString([]byte(
-			fmt.Sprintf("%s:%s", os.Getenv(envUser), os.Getenv(envPass)),
-		))
-		req.Header.Add("Authorization", fmt.Sprintf("Basic %s", auth))
+			auth := base64.StdEncoding.EncodeToString([]byte(
+				fmt.Sprintf("%s:%s", os.Getenv(envUser), os.Getenv(envPass)),
+			))
+			req.Header.Add("Authorization", fmt.Sprintf("Basic %s", auth))
 
-		resp, err := client.Do(req)
-		if err != nil {
-			return errors.Wrap(err, "failed to make request to Dynamic DNS Service")
-		}
+			resp, err := client.Do(req)
+			if err != nil {
+				return errors.Wrap(err, "failed to make request to Dynamic DNS Service")
+			}
 
-		if resp.StatusCode > 299 {
-			return errors.Errorf("failed to query Dynamic DNS Service, received '%d'", resp.StatusCode)
-		}
-		defer resp.Body.Close()
+			if resp.StatusCode > 299 {
+				return errors.Errorf("failed to query Dynamic DNS Service, received '%d'", resp.StatusCode)
+			}
+			defer resp.Body.Close()
 
-		data, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return errors.Wrap(err, "failed to decode result from Dynamic DNS Service")
-		}
+			data, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return errors.Wrap(err, "failed to decode result from Dynamic DNS Service")
+			}
 
-		switch {
-		case strings.Contains(string(data), "good"):
-		case strings.Contains(string(data), "nochg"):
-		default:
-			return errors.Errorf("received error code from Dynamic DNS service: %s", data)
+			switch {
+			case strings.Contains(string(data), "good"):
+			case strings.Contains(string(data), "nochg"):
+			default:
+				return errors.Errorf("received error code from Dynamic DNS service: %s", data)
+			}
 		}
 
 		interval, err := strconv.Atoi(os.Getenv(envInterval))
