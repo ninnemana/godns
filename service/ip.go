@@ -1,7 +1,6 @@
 package service
 
 import (
-	"fmt"
 	"io/ioutil"
 	"net/http"
 
@@ -42,7 +41,6 @@ func externalIP() (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to read body")
 	}
-	fmt.Println(string(data))
 
 	return string(data), nil
 }
