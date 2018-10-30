@@ -29,10 +29,6 @@ type Service struct {
 	config Config
 }
 
-var (
-	envInterval = "GDNS_INTERVAL"
-)
-
 // New validates that the required system settings
 // have been configured for the service to run.
 func New(configFile string) (*Service, error) {
@@ -58,12 +54,6 @@ func New(configFile string) (*Service, error) {
 	}, nil
 }
 
-type Ping struct {
-	Hostname string `json:"hostname"`
-	IP       string `json:"myip"`
-	Offline  string `json:"offline,omitempty"` // yes|no
-}
-
 func (s *Service) Run() error {
 	client := &http.Client{
 		Timeout: time.Second * 5,
@@ -76,8 +66,6 @@ func (s *Service) Run() error {
 		}
 
 		for _, host := range s.config.Hosts {
-			fmt.Println(host.Host, host.User, host.Password)
-
 			// set the request parameters
 			q := url.Values{}
 			q.Add("hostname", host.Host)
