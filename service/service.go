@@ -2,53 +2,60 @@ package service
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 )
 
-type Service struct{}
+type Config struct {
+	Interval time.Duration `json:"interval"`
+	Hosts    []Host        `json:"hosts"`
+}
+
+type Host struct {
+	Host     string `json:"host"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
+type Service struct {
+	config Config
+}
 
 var (
-	envUser     = "GDNS_USER"
-	envPass     = "GDNS_PASSWD"
 	envInterval = "GDNS_INTERVAL"
-	envHostname = "GDNS_HOSTS"
 )
 
 // New validates that the required system settings
 // have been configured for the service to run.
-func New() (*Service, error) {
-
-	if os.Getenv(envUser) == "" {
-		return nil, errors.Errorf("expected a username for the servie, received '%s' using environment variable '%s'", os.Getenv(envUser), envUser)
-	}
-
-	if os.Getenv(envPass) == "" {
-		return nil, errors.Errorf("expected a password for the service using environment variable '%s'", envPass)
-	}
-
-	if os.Getenv(envHostname) == "" {
-		return nil, errors.Errorf("expected a pass for the service using environment variable '%s'", envHostname)
-	}
-
-	if i, _ := strconv.Atoi(os.Getenv(envInterval)); i == 0 {
-		return nil, errors.Errorf("expected interval setting, received '%s' using environment variable '%s'", os.Getenv(envInterval), envInterval)
-	}
+func New(configFile string) (*Service, error) {
 
 	// i'm choosing not to populate the
 	// credentials and interval within the
 	//environment variables to allow for configuration
 	// swapping without restarting the service.
 
-	return &Service{}, nil
+	// parse the config file
+	file, err := os.Open(configFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open config file")
+	}
+
+	var config Config
+	if err := json.NewDecoder(file).Decode(&config); err != nil {
+		return nil, errors.Wrap(err, "failed to read config file")
+	}
+
+	return &Service{
+		config: config,
+	}, nil
 }
 
 type Ping struct {
@@ -68,10 +75,12 @@ func (s *Service) Run() error {
 			return errors.Wrap(err, "failed to get local IP address")
 		}
 
-		for _, h := range strings.Split(envHostname, ",") {
+		for _, host := range s.config.Hosts {
+			fmt.Println(host.Host, host.User, host.Password)
+
 			// set the request parameters
 			q := url.Values{}
-			q.Add("hostname", h)
+			q.Add("hostname", host.Host)
 			q.Add("myip", ip)
 
 			req, err := http.NewRequest(
@@ -86,7 +95,7 @@ func (s *Service) Run() error {
 			req.URL.RawQuery = q.Encode()
 
 			auth := base64.StdEncoding.EncodeToString([]byte(
-				fmt.Sprintf("%s:%s", os.Getenv(envUser), os.Getenv(envPass)),
+				fmt.Sprintf("%s:%s", host.User, host.Password),
 			))
 			req.Header.Add("Authorization", fmt.Sprintf("Basic %s", auth))
 
@@ -113,15 +122,6 @@ func (s *Service) Run() error {
 			}
 		}
 
-		interval, err := strconv.Atoi(os.Getenv(envInterval))
-		switch {
-		case err != nil:
-			return errors.Wrap(err, "failed to check interval setting")
-		case interval == 0:
-			interval = 60
-			// return errors.New("interval must be greater than zero")
-		}
-
-		time.Sleep(time.Second * time.Duration(interval))
+		time.Sleep(time.Second * s.config.Interval)
 	}
 }
