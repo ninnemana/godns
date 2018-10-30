@@ -3,6 +3,7 @@ package service
 import (
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -42,5 +43,5 @@ func externalIP() (string, error) {
 		return "", errors.Wrap(err, "failed to read body")
 	}
 
-	return string(data), nil
+	return strings.TrimSpace(string(data)), nil
 }
