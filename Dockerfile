@@ -1,6 +1,12 @@
-FROM arm32v7/golang:1.12.6-alpine
+FROM golang:1.12.6-alpine
+
+RUN apk update && apk upgrade && \
+    apk add --no-cache bash git openssh
 
 COPY . /app
 WORKDIR /app
 
-RUN go build -mod=vendor -o /godns .
+ENV GO111MODULE=on
+RUN go mod download
+
+RUN CGO_ENABLED=0 go build -o /godns .
