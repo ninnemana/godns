@@ -3,7 +3,7 @@ steps:
   args: [
     'build', 
     '-t', 
-    'gcr.io/$PROJECT_ID/godns:$COMMIT_SHA', 
+    'gcr.io/$PROJECT_ID/godns:$SHORT_SHA', 
     '-f',
     'Dockerfile',
     '.'
@@ -12,7 +12,7 @@ steps:
   args: [
     'build', 
     '-t', 
-    'gcr.io/$PROJECT_ID/godns-arm:$COMMIT_SHA', 
+    'gcr.io/$PROJECT_ID/godns-arm:$SHORT_SHA', 
     '-f',
     'Dockerfile.arm',
     '.'
@@ -20,18 +20,18 @@ steps:
 - name: gcr.io/cloud-builders/docker
   args: [
     'tag',
-    'gcr.io/$PROJECT_ID/godns-arm:$COMMIT_SHA', 
+    'gcr.io/$PROJECT_ID/godns-arm:$SHORT_SHA', 
     'gcr.io/$PROJECT_ID/godns-arm:latest'
   ]
 - name: gcr.io/cloud-builders/docker
   args: [
     'tag',
-    'gcr.io/$PROJECT_ID/godns:$COMMIT_SHA', 
+    'gcr.io/$PROJECT_ID/godns:$SHORT_SHA', 
     'gcr.io/$PROJECT_ID/godns:latest'
   ]
 images: [
   'gcr.io/$PROJECT_ID/godns-arm:latest',
   'gcr.io/$PROJECT_ID/godns:latest',
-  'gcr.io/$PROJECT_ID/godns-arm:$COMMIT_SHA',
-  'gcr.io/$PROJECT_ID/godns:$COMMIT_SHA'
+  'gcr.io/$PROJECT_ID/godns-arm:$SHORT_SHA',
+  'gcr.io/$PROJECT_ID/godns:$SHORT_SHA'
 ]
