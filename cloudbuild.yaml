@@ -1,4 +1,15 @@
 steps:
+- id: go_linter
+  name: "golangci/golangci-lint"
+  args: ["golangci-lint","run"]
+- id: go_test
+  name: "gcr.io/cloud-builders/go"
+  args: ["test","."]
+  env: ["GOPATH=."]
+- id: go_security
+  name: "securego/gosec"
+  args: ["."]
+  env: ["GOPATH=."]
 - name: gcr.io/cloud-builders/docker
   args: [
     'build', 
