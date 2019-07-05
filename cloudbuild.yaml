@@ -45,5 +45,5 @@ steps:
   entrypoint: 'bash'
   args:
     - '-c'
-    - '[[ "$BRANCH_NAME" == "master" ]] && docker push gcr.io/$PROJECT_ID/godns || echo pass && true'
+    - '[[ "$BRANCH_NAME" == "master" ]] && docker push gcr.io/$PROJECT_ID/godns && docker push gcr.io/$PROJECT_ID/godns-arm || echo pass && true'
   
