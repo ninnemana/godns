@@ -29,7 +29,9 @@ func main() {
 		log.Fatalf("failed to create structured logger: %v", err)
 	}
 
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+	}()
 	l := logger.Sugar()
 
 	if promPort == nil {
