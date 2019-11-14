@@ -5,10 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/ninnemana/drudge/telemetry"
 	"github.com/ninnemana/godns/service"
+	"go.uber.org/zap"
 )
 
 var (
@@ -24,28 +24,40 @@ func main() {
 		log.Fatal("invalid config file")
 	}
 
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("failed to create structured logger: %v", err)
+	}
+
+	defer func() {
+		_ = logger.Sync()
+	}()
+	l := logger.Sugar()
+
 	if promPort == nil {
 		promPort = &defaultPort
 	}
 
 	go func() {
+		l.Infow("Starting Prometheus", zap.String("port", *promPort))
 		if err := telemetry.StartPrometheus(fmt.Sprintf(":%s", *promPort)); err != nil {
-			log.Fatalf("failed to start prometheus exporter: %v", err)
+			l.Fatalw("failed to start prometheus exporter", zap.Error(err))
 		}
 	}()
 
-	flush, err := telemetry.StackDriver(os.Getenv("GCE_PROJECT_ID"), "godns", os.Getenv("GCE_SERVICE_ACCOUNT"))
-	if err != nil {
-		log.Fatalf("failed to start StackDriver exporter: %v", err)
-	}
-	defer flush()
+	//flush, err := telemetry.StackDriver(os.Getenv("GCE_PROJECT_ID"), "godns", os.Getenv("GCE_SERVICE_ACCOUNT"))
+	//if err != nil {
+	//	l.Fatalw("failed to start StackDriver exporter", zap.Error(err))
+	//}
+	//defer flush()
 
 	svc, err := service.New(*configFile)
 	if err != nil {
-		log.Fatalf("failed to create service: %v", err)
+		l.Fatalw("failed to create service", zap.Error(err))
 	}
 
+	l.Info("Starting DNS Publisher")
 	if err := svc.Run(context.Background()); err != nil {
-		log.Fatalf("fell out: %v", err)
+		l.Fatalw("fell out", zap.Error(err))
 	}
 }
