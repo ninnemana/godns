@@ -13,8 +13,9 @@ RUN CGO_ENABLED=0 go build -o /godns .
 
 FROM alpine
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /etc/passwd /etc/passwd
+RUN apk update && apk upgrade && \
+    apk add --no-cache ca-certificates
+
 COPY --from=builder /godns /godns
 
 ENTRYPOINT ["/godns"]
