@@ -6,11 +6,27 @@ on:
       - master
 
 jobs:
-
   build:
-
+    name: Lint
     runs-on: ubuntu-latest
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@master
 
+    - name: GolangCI-Lint Action
+      uses: actions-contrib/golangci-lint@v0.1.0
+    
+    - name: Setup go
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.13
+    
+    - run: go test ./...
+
+  docker:
+    needs:
+      - build
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
     - name: Build the Docker image
