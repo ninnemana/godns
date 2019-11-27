@@ -1,9 +1,11 @@
 name: Deployment
 
-on:
-  push:
-    branches:
-      - master
+on: [push]
+
+# on:
+#   push:
+#     branches:
+#       - master
 
 jobs:
   build:
@@ -24,6 +26,8 @@ jobs:
     - run: go test ./...
 
   docker:
+    # needs:
+    #   - build
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
