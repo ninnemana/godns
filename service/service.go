@@ -45,12 +45,6 @@ type Service struct {
 // New validates that the required system settings
 // have been configured for the service to run.
 func New(configFile string, l *zap.SugaredLogger) (*Service, error) {
-
-	// i'm choosing not to populate the
-	// credentials and interval within the
-	//environment variables to allow for configuration
-	// swapping without restarting the service.
-
 	// parse the config file
 	file, err := os.Open(configFile)
 	if err != nil {
@@ -85,6 +79,7 @@ func New(configFile string, l *zap.SugaredLogger) (*Service, error) {
 func (s *Service) Run(ctx context.Context) error {
 	for {
 		s.log.Info("Checking DNS Mappings")
+
 		if err := s.execute(ctx); err != nil {
 			s.log.Errorf("failed to run DNS check: %v", err)
 		}
@@ -97,16 +92,21 @@ func (s *Service) execute(ctx context.Context) (err error) {
 	ctx, span := trace.StartSpan(ctx, "execution")
 	// telemetry
 	telemetry.MeasureInt(ctx, s.count, 1)
+
 	start := time.Now()
+
 	defer func() {
 		span.End()
+
 		telemetry.MeasureFloat(ctx, s.latency, sinceInMilliseconds(start))
+
 		if err != nil {
 			telemetry.MeasureInt(ctx, s.errors, 1)
 		}
 	}()
 
 	var ip string
+
 	ip, err = externalIP()
 	if err != nil {
 		return errors.Wrap(err, "failed to get local IP address")
@@ -150,12 +150,13 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", auth))
 	req.Header.Add("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)")
 
-	resp, err := s.client.Do(req)
+	resp, err := s.client.Do(req.WithContext(ctx))
 	if err != nil {
 		return errors.Wrap(err, "failed to make request to Dynamic DNS Service")
 	}
 
 	span.AddAttributes(trace.Int64Attribute("statusCode", int64(resp.StatusCode)))
+
 	if resp.StatusCode > 299 {
 		return errors.Errorf("failed to query Dynamic DNS Service, received '%d'", resp.StatusCode)
 	}
