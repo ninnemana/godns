@@ -19,4 +19,5 @@ jobs:
         docker tag gcr.io/ninneman-org/godns:${{ github.sha }} gcr.io/ninneman-org/godns:latest
         docker build . --file Dockerfile.arm --tag gcr.io/ninneman-org/godns-arm:${{ github.sha }}
         docker tag gcr.io/ninneman-org/godns-arm:${{ github.sha }} gcr.io/ninneman-org/godns-arm:latest
-        docker push gcr.io/ninneman-org/godns gcr.io/ninneman-org/godns-arm
+        docker push gcr.io/ninneman-org/godns
+        docker push gcr.io/ninneman-org/godns-arm
