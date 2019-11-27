@@ -1,7 +1,6 @@
-name: Go
+name: WIP
 on: [push]
 jobs:
-
   build:
     name: Lint
     runs-on: ubuntu-latest
