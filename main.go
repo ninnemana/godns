@@ -24,7 +24,7 @@ func main() {
 		log.Fatal("invalid config file")
 	}
 
-	logger, err := zap.NewProduction()
+	logger, err := zap.NewDevelopment()
 	if err != nil {
 		log.Fatalf("failed to create structured logger: %v", err)
 	}
@@ -51,7 +51,7 @@ func main() {
 	//}
 	//defer flush()
 
-	svc, err := service.New(*configFile)
+	svc, err := service.New(*configFile, l)
 	if err != nil {
 		l.Fatalw("failed to create service", zap.Error(err))
 	}
