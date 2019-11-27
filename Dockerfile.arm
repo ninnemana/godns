@@ -13,4 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 go build -o /godns .
 
 FROM arm32v7/alpine
 
+RUN apk update && apk upgrade && \
+    apk add --no-cache ca-certificates
+
 COPY --from=builder /godns /godns
