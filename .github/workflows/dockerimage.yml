@@ -25,9 +25,9 @@ jobs:
     
     - run: go test ./...
 
-  docker:
-    # needs:
-    #   - build
+  amd:
+    needs:
+      - build
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
@@ -46,6 +46,26 @@ jobs:
       run: |
         docker build . --file Dockerfile --tag gcr.io/ninneman-org/godns:${{ github.sha }}
         docker tag gcr.io/ninneman-org/godns:${{ github.sha }} gcr.io/ninneman-org/godns:latest
+        docker push gcr.io/ninneman-org/godns
+  arm:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        version: '270.0.0'
+        service_account_email: ${{ secrets.GCLOUD_EMAIL }}
+        service_account_key: ${{ secrets.GCLOUD_AUTH }}
+
+    # Configure docker to use the gcloud command-line tool as a credential helper
+    - run: |
+        # Set up docker to authenticate
+        # via gcloud command-line tool.
+        gcloud auth configure-docker
+    - name: Build the Docker image
+      run: |
         docker build . --file Dockerfile.arm --tag gcr.io/ninneman-org/godns-arm:${{ github.sha }}
         docker tag gcr.io/ninneman-org/godns-arm:${{ github.sha }} gcr.io/ninneman-org/godns-arm:latest
         docker push gcr.io/ninneman-org/godns
