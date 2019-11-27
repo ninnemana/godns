@@ -17,4 +17,5 @@ RUN apk update && apk upgrade && \
     apk add --no-cache ca-certificates
 
 COPY --from=builder /godns /godns
+
 ENTRYPOINT ["/godns"]
