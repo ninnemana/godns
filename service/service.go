@@ -77,14 +77,16 @@ func New(configFile string, l *zap.SugaredLogger) (*Service, error) {
 }
 
 func (s *Service) Run(ctx context.Context) error {
+	s.log.Debugw("running on interval", zap.Duration("interval", s.config.Interval))
+
+	c := time.NewTicker(s.config.Interval)
 	for {
+		<-c.C
 		s.log.Info("Checking DNS Mappings")
 
 		if err := s.execute(ctx); err != nil {
 			s.log.Errorf("failed to run DNS check: %v", err)
 		}
-
-		time.Sleep(time.Second * s.config.Interval)
 	}
 }
 
