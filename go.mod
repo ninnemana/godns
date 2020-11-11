@@ -1,5 +1,7 @@
 module github.com/ninnemana/godns
 
+go 1.15
+
 require (
 	github.com/ninnemana/drudge v0.0.0-20190528151411-cf451f7cdf4c
 	github.com/pkg/errors v0.8.1

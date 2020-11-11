@@ -1,4 +1,8 @@
 {
-  "interval": 60,
-  "hosts": []
+  "interval": "60s",
+  "hosts": [{
+    "host": "www.example.com",
+    "user": "user",
+    "password": "password"
+  }]
 }
