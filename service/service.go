@@ -139,9 +139,9 @@ func (s *Service) execute(ctx context.Context) (err error) {
 
 	for _, host := range s.config.Hosts {
 		if err := s.updateHost(ctx, host, ip); err != nil {
-			log.Error("failed to update host", zap.Error(err))
+			log.Error("failed to update host", zap.Error(err), zap.String("host", host.Host))
 			ext.Error.Set(span, true)
-			span.LogFields(tracelog.Error(err))
+			span.LogFields(tracelog.Error(err), tracelog.String("host", host.Host))
 		}
 	}
 
@@ -216,7 +216,10 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 		log.Info("no change was recorded", zap.String("host", host.Host), zap.String("ip", ip))
 		span.SetTag("change", "nochange")
 	default:
-		return fmt.Errorf("received error code from Dynamic DNS service: %s", data)
+		err := fmt.Errorf("received error code from Dynamic DNS service: %s", data)
+		span.LogFields(tracelog.Error(err))
+		log.Error("received error from Dynamic DNS service", zap.Error(err))
+		return err
 	}
 
 	return nil
