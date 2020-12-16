@@ -11,14 +11,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uber/jaeger-client-go"
+
 	"github.com/ninnemana/drudge/telemetry"
+	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
+	tracelog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
-	"go.opencensus.io/trace"
+
+	//"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
@@ -35,7 +41,7 @@ type Host struct {
 type Service struct {
 	config Config
 	client *http.Client
-	log    *zap.SugaredLogger
+	log    *zap.Logger
 
 	count   *stats.Int64Measure
 	errors  *stats.Int64Measure
@@ -44,7 +50,7 @@ type Service struct {
 
 // New validates that the required system settings
 // have been configured for the service to run.
-func New(configFile string, l *zap.SugaredLogger) (*Service, error) {
+func New(configFile string, l *zap.Logger) (*Service, error) {
 	// parse the config file
 	file, err := os.Open(configFile)
 	if err != nil {
@@ -77,28 +83,41 @@ func New(configFile string, l *zap.SugaredLogger) (*Service, error) {
 }
 
 func (s *Service) Run(ctx context.Context) error {
-	s.log.Debugw("running on interval", zap.Duration("interval", s.config.Interval))
+	s.log.Debug("running on interval", zap.Duration("interval", s.config.Interval))
 
 	c := time.NewTicker(s.config.Interval)
 	for {
-		<-c.C
-		s.log.Info("Checking DNS Mappings")
+		span, ctx := opentracing.StartSpanFromContext(ctx, "service.Run")
+		log := s.log.With(
+			zap.String("traceID", traceID(ctx)),
+			zap.String("spanID", spanID(ctx)),
+		)
+
+		log.Info("Checking DNS Mappings")
 
 		if err := s.execute(ctx); err != nil {
-			s.log.Errorf("failed to run DNS check: %v", err)
+			ext.Error.Set(span, true)
+			span.LogFields(tracelog.Error(err))
+			log.Error("failed to run DNS check", zap.Error(err))
 		}
+
+		span.Finish()
+		<-c.C
 	}
 }
 
 func (s *Service) execute(ctx context.Context) (err error) {
-	ctx, span := trace.StartSpan(ctx, "execution")
-	// telemetry
-	telemetry.MeasureInt(ctx, s.count, 1)
+	span, ctx := opentracing.StartSpanFromContext(ctx, "service.execute")
+
+	log := s.log.With(
+		zap.String("traceID", traceID(ctx)),
+		zap.String("spanID", spanID(ctx)),
+	)
 
 	start := time.Now()
 
 	defer func() {
-		span.End()
+		span.Finish()
 
 		telemetry.MeasureFloat(ctx, s.latency, sinceInMilliseconds(start))
 
@@ -111,12 +130,18 @@ func (s *Service) execute(ctx context.Context) (err error) {
 
 	ip, err = externalIP()
 	if err != nil {
-		return errors.Wrap(err, "failed to get local IP address")
+		err := fmt.Errorf("failed to get local IP address: %w", err)
+		log.Error("failed to get local IP address", zap.Error(err))
+		ext.Error.Set(span, true)
+		span.LogFields(tracelog.Error(err))
+		return err
 	}
 
 	for _, host := range s.config.Hosts {
 		if err := s.updateHost(ctx, host, ip); err != nil {
-			s.log.Errorf("failed to update host: %v", err)
+			log.Error("failed to update host", zap.Error(err))
+			ext.Error.Set(span, true)
+			span.LogFields(tracelog.Error(err))
 		}
 	}
 
@@ -124,11 +149,16 @@ func (s *Service) execute(ctx context.Context) (err error) {
 }
 
 func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
-	ctx, span := trace.StartSpan(ctx, "update")
-	defer span.End()
+	span, ctx := opentracing.StartSpanFromContext(ctx, "service.update")
+	defer span.Finish()
 
-	span.AddAttributes(trace.StringAttribute("hostname", host.Host))
-	s.log.Infow("updating host", "host", host.Host, "ip", ip)
+	log := s.log.With(
+		zap.String("traceID", traceID(ctx)),
+		zap.String("spanID", spanID(ctx)),
+	)
+
+	span.SetTag("hostname", host.Host)
+	log.Info("updating host", zap.String("host", host.Host), zap.String("ip", ip))
 
 	// set the request parameters
 	q := url.Values{}
@@ -154,30 +184,39 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 
 	resp, err := s.client.Do(req.WithContext(ctx))
 	if err != nil {
+		span.LogFields(tracelog.Error(err))
+		log.Error("failed to make request to DNS service", zap.Error(err))
 		return errors.Wrap(err, "failed to make request to Dynamic DNS Service")
 	}
 
-	span.AddAttributes(trace.Int64Attribute("statusCode", int64(resp.StatusCode)))
+	span.SetTag("statusCode", resp.StatusCode)
 
 	if resp.StatusCode > 299 {
+		span.LogFields(tracelog.Error(err), tracelog.Int("statusCode", resp.StatusCode))
+		log.Error("failed to make request to DNS service", zap.Error(err))
 		return errors.Errorf("failed to query Dynamic DNS Service, received '%d'", resp.StatusCode)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrap(err, "failed to decode result from Dynamic DNS Service")
+		const msg = "failed to decode result from Dynamic DNS Service"
+		span.LogFields(tracelog.Error(err))
+		log.Error(msg, zap.Error(err))
+		return errors.Wrap(err, msg)
 	}
 
 	switch {
 	case strings.Contains(string(data), "good"):
-		s.log.Infow("change was successfully applied", "host", host.Host, "ip", ip)
-		span.AddAttributes(trace.StringAttribute("change", "good"))
+		log.Info("change was successfully applied", zap.String("host", host.Host), zap.String("ip", ip))
+		span.SetTag("change", "good")
 	case strings.Contains(string(data), "nochg"):
-		s.log.Infow("no change was recorded", "host", host.Host, "ip", ip)
-		span.AddAttributes(trace.StringAttribute("change", "nochange"))
+		log.Info("no change was recorded", zap.String("host", host.Host), zap.String("ip", ip))
+		span.SetTag("change", "nochange")
 	default:
-		return errors.Errorf("received error code from Dynamic DNS service: %s", data)
+		return fmt.Errorf("received error code from Dynamic DNS service: %s", data)
 	}
 
 	return nil
@@ -185,4 +224,32 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 
 func sinceInMilliseconds(s time.Time) float64 {
 	return float64(time.Since(s).Nanoseconds()) / 1e6
+}
+
+func traceID(ctx context.Context) string {
+	sp := opentracing.SpanFromContext(ctx)
+	if sp == nil {
+		return ""
+	}
+
+	sctx, ok := sp.Context().(jaeger.SpanContext)
+	if !ok {
+		return ""
+	}
+
+	return sctx.TraceID().String()
+}
+
+func spanID(ctx context.Context) string {
+	sp := opentracing.SpanFromContext(ctx)
+	if sp == nil {
+		return ""
+	}
+
+	sctx, ok := sp.Context().(jaeger.SpanContext)
+	if !ok {
+		return ""
+	}
+
+	return sctx.SpanID().String()
 }
