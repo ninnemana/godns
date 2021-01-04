@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 
+	clog "github.com/ninnemana/godns/log"
 	"github.com/ninnemana/godns/service"
 	"go.uber.org/zap"
 )
@@ -42,14 +43,21 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to start tracer", zap.Error(err))
 	}
-	defer flush.Close()
+	defer flush()
 
-	svc, err := service.New(*configFile, logger)
+	if err := initMeter(); err != nil {
+		logger.Fatal("failed to start metric meter", zap.Error(err))
+	}
+
+	svc, err := service.New(*configFile, &clog.Contextual{
+		Logger: logger,
+	})
 	if err != nil {
 		logger.Fatal("failed to create service", zap.Error(err))
 	}
 
 	logger.Info("Starting DNS Publisher")
+
 	if err := svc.Run(context.Background()); err != nil {
 		logger.Fatal("fell out", zap.Error(err))
 	}

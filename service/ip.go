@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -21,8 +22,8 @@ type NetworkResult struct {
 	Protocol string `json:"protocol"`
 }
 
-func externalIP() (string, error) {
-	req, err := http.NewRequest(http.MethodGet, "http://ifconfig.me/ip", nil)
+func externalIP(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ifconfig.me/ip", nil)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create HTTP request")
 	}
@@ -36,7 +37,7 @@ func externalIP() (string, error) {
 		return "", errors.Errorf("failed to execute HTTP request")
 	}
 
-	if resp.StatusCode > 299 {
+	if resp.StatusCode >= http.StatusMultipleChoices {
 		return "", errors.Errorf("failed to make IP lookup, failed with status code '%d'", resp.StatusCode)
 	}
 	defer resp.Body.Close()
