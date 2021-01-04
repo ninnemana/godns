@@ -1,9 +1,10 @@
 package service
 
 import (
-	"encoding/json"
-	"fmt"
+	"context"
+	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -21,21 +22,30 @@ type NetworkResult struct {
 	Protocol string `json:"protocol"`
 }
 
-func externalIP() (string, error) {
-	resp, err := http.Get("http://ipv4.lookup.test-ipv6.com/ip/")
+func externalIP(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ifconfig.me/ip", nil)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to create HTTP request")
 	}
 
-	if resp.StatusCode > 299 {
+	req.Header.Add("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)")
+
+	cl := &http.Client{}
+
+	resp, err := cl.Do(req)
+	if err != nil {
+		return "", errors.Errorf("failed to execute HTTP request")
+	}
+
+	if resp.StatusCode >= http.StatusMultipleChoices {
 		return "", errors.Errorf("failed to make IP lookup, failed with status code '%d'", resp.StatusCode)
 	}
+	defer resp.Body.Close()
 
-	var res NetworkResult
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return "", errors.Wrap(err, "failed to decode result from IP lookups")
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read body")
 	}
-	fmt.Println(res)
 
-	return res.IP, nil
+	return strings.TrimSpace(string(data)), nil
 }
