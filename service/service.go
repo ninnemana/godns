@@ -22,11 +22,13 @@ import (
 )
 
 const (
+	serviceName = "godns"
 	httpTimeout = time.Second * 5
 )
 
 var (
-	tracer = otel.Tracer("godns")
+	tracer = otel.Tracer(serviceName)
+	meter  = otel.GetMeterProvider().Meter(serviceName)
 )
 
 type Config struct {
@@ -52,7 +54,7 @@ type Service struct {
 
 // New validates that the required system settings
 // have been configured for the service to run.
-func New(configFile string, l *log.Contextual, meter metric.Meter) (*Service, error) {
+func New(configFile string, l *log.Contextual) (*Service, error) {
 	// parse the config file
 	file, err := os.Open(configFile)
 	if err != nil {

@@ -5,11 +5,9 @@ import (
 	"net/http"
 
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/metric/prometheus"
 	"go.opentelemetry.io/otel/exporters/trace/jaeger"
 	"go.opentelemetry.io/otel/label"
-	"go.opentelemetry.io/otel/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -39,10 +37,10 @@ func initTracer(serviceName string) (func(), error) {
 	return flush, nil
 }
 
-func initMeter() (metric.Meter, error) {
+func initMeter() error {
 	exporter, err := prometheus.InstallNewPipeline(prometheus.Config{})
 	if err != nil {
-		return metric.NoopMeterProvider{}.Meter("godns"), fmt.Errorf("failed to initialize prometheus exporter: %w", err)
+		return fmt.Errorf("failed to initialize prometheus exporter: %w", err)
 	}
 
 	http.HandleFunc("/", exporter.ServeHTTP)
@@ -50,5 +48,5 @@ func initMeter() (metric.Meter, error) {
 		_ = http.ListenAndServe(":2222", nil)
 	}()
 
-	return otel.GetMeterProvider().Meter("godns"), nil
+	return nil
 }
