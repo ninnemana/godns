@@ -7,7 +7,6 @@ import (
 
 	clog "github.com/ninnemana/godns/log"
 	"github.com/ninnemana/godns/service"
-
 	"go.uber.org/zap"
 )
 
