@@ -44,11 +44,16 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to start tracer", zap.Error(err))
 	}
-	defer flush.Close()
+	defer flush()
+
+	meter, err := initMeter()
+	if err != nil {
+		logger.Fatal("failed to start metric meter", zap.Error(err))
+	}
 
 	svc, err := service.New(*configFile, &clog.Contextual{
 		Logger: logger,
-	})
+	}, meter)
 	if err != nil {
 		logger.Fatal("failed to create service", zap.Error(err))
 	}

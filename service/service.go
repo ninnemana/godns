@@ -11,19 +11,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ninnemana/drudge/telemetry"
 	"github.com/ninnemana/godns/log"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/unit"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
 
 const (
 	httpTimeout = time.Second * 5
+)
+
+var (
+	tracer = otel.Tracer("godns")
 )
 
 type Config struct {
@@ -42,14 +45,14 @@ type Service struct {
 	client *http.Client
 	log    *log.Contextual
 
-	count   *stats.Int64Measure
-	errors  *stats.Int64Measure
-	latency *stats.Float64Measure
+	latency metric.Float64ValueRecorder
+	count   metric.Int64Counter
+	errors  metric.Int64Counter
 }
 
 // New validates that the required system settings
 // have been configured for the service to run.
-func New(configFile string, l *log.Contextual) (*Service, error) {
+func New(configFile string, l *log.Contextual, meter metric.Meter) (*Service, error) {
 	// parse the config file
 	file, err := os.Open(configFile)
 	if err != nil {
@@ -61,19 +64,38 @@ func New(configFile string, l *log.Contextual) (*Service, error) {
 		return nil, errors.Wrap(err, "failed to read config file")
 	}
 
+	latency, err := meter.NewFloat64ValueRecorder(
+		"operation_latency",
+		metric.WithDescription("Latency when the service is ran"),
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create operation latency metric: %w", err)
+	}
+
+	count, err := meter.NewInt64Counter(
+		"operation_count",
+		metric.WithDescription("Number of times the service is ran"),
+		metric.WithUnit(unit.Dimensionless),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create operation count metric: %w", err)
+	}
+
+	errRecorder, err := meter.NewInt64Counter(
+		"operation_count",
+		metric.WithDescription("Number of times the service encounters an error"),
+		metric.WithUnit(unit.Dimensionless),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create operation error count metric: %w", err)
+	}
+
 	return &Service{
-		count: telemetry.Int64Measure("operation_count", "Number of times the service is ran", "1", []tag.Key{
-			telemetry.ServiceTag,
-		}, view.Count()),
-		errors: telemetry.Int64Measure("operation_errors", "Number of times the service encounters an error", "1", []tag.Key{
-			telemetry.ServiceTag,
-			telemetry.ErrorTag,
-		}, view.Count()),
-		latency: telemetry.Float64Measure("operation_latency", "Latency when the service is ran", "ms", []tag.Key{
-			telemetry.ServiceTag,
-			telemetry.LatencyTag,
-		}, telemetry.LatencyDistribution),
-		config: config,
+		count:   count,
+		errors:  errRecorder,
+		latency: latency,
+		config:  config,
 		client: &http.Client{
 			Transport:     http.DefaultClient.Transport,
 			CheckRedirect: http.DefaultClient.CheckRedirect,
@@ -90,7 +112,7 @@ func (s *Service) Run(ctx context.Context) error {
 	c := time.NewTicker(s.config.Interval)
 
 	for {
-		span, ctx := opentracing.StartSpanFromContext(ctx, "service.Run")
+		ctx, span := tracer.Start(ctx, "service.Run")
 
 		s.log.Info(ctx, "Checking DNS Mappings")
 
@@ -98,23 +120,24 @@ func (s *Service) Run(ctx context.Context) error {
 			s.log.Error(ctx, "failed to run DNS check", zap.Error(err))
 		}
 
-		span.Finish()
+		span.End()
 		<-c.C
 	}
 }
 
 func (s *Service) execute(ctx context.Context) (err error) {
-	span, ctx := opentracing.StartSpanFromContext(ctx, "service.execute")
+	s.count.Add(ctx, 1)
+	ctx, span := tracer.Start(ctx, "service.execute")
 
 	start := time.Now()
 
 	defer func() {
-		span.Finish()
+		span.End()
 
-		telemetry.MeasureFloat(ctx, s.latency, sinceInMilliseconds(start))
+		s.latency.Record(ctx, sinceInMilliseconds(start))
 
 		if err != nil {
-			telemetry.MeasureInt(ctx, s.errors, 1)
+			s.errors.Add(ctx, 1)
 		}
 	}()
 
@@ -143,8 +166,8 @@ func (s *Service) execute(ctx context.Context) (err error) {
 }
 
 func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
-	span, ctx := opentracing.StartSpanFromContext(ctx, "service.update")
-	defer span.Finish()
+	ctx, span := tracer.Start(ctx, "service.update")
+	defer span.End()
 
 	s.log.Info(ctx, "updating host", zap.String("host", host.Host), zap.String("ip", ip))
 
@@ -159,6 +182,8 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 		nil,
 	)
 	if err != nil {
+		s.log.Error(ctx, "failed to create request", zap.Error(err))
+
 		return errors.Wrap(err, "failed to create request")
 	}
 
@@ -177,7 +202,7 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 		return errors.Wrap(err, "failed to make request to Dynamic DNS Service")
 	}
 
-	span.SetTag("statusCode", resp.StatusCode)
+	span.SetAttributes(label.Int("statusCode", resp.StatusCode))
 
 	if resp.StatusCode >= http.StatusMultipleChoices {
 		s.log.Error(ctx, "failed to make request to DNS service", zap.Error(err))
