@@ -1,4 +1,4 @@
-FROM golang:1.15.6-alpine AS builder
+FROM arm32v7/golang:1.15
 
 RUN apk update && apk upgrade && \
     apk add --no-cache bash git openssh ca-certificates
@@ -10,13 +10,4 @@ ENV GO111MODULE=on
 RUN go mod download
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 go build -o /godns .
-
-FROM arm32v7/alpine
-
-COPY --from=builder /godns /godns
-
 RUN ls /
-
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /etc/passwd /etc/passwd
-

@@ -57,21 +57,51 @@ jobs:
     needs:
       - build
     runs-on: ubuntu-latest
+    env:
+      DOCKER_REGISTRY: gcr.io/ninneman-org
+      DOCKER_IMAGE: godns-arm
+      DOCKER_TARGET_PLATFORM: linux/arm/v7
     steps:
     - uses: actions/checkout@v1
+
+    - name: Setup Docker Buildx
+      uses: crazy-max/ghaction-docker-buildx@v1
+      with:
+        version: latest
+
+    - name: Prepare Variables
+      if: success()
+      id: prepare
+      run: |
+        echo ::set-output name=docker_platform::${DOCKER_TARGET_PLATFORM}
+        echo ::set-output name=docker_image::${DOCKER_REGISTRY}/${DOCKER_IMAGE}
+
+    - name: Build the Docker image
+      if: success()
+      id: build
+      run: |
+        docker buildx build \
+          --platform ${{steps.prepare.outputs.docker_platform}} \
+          --file Dockerfile.arm \
+          --tag gcr.io/ninneman-org/godns-arm:${{ github.sha }} \
+          .
+
+    # Configure docker to use the gcloud command-line tool as a credential helper
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      if: success()
+      id: login
       with:
         version: '270.0.0'
         service_account_email: ${{ secrets.GCLOUD_EMAIL }}
         service_account_key: ${{ secrets.GCLOUD_AUTH }}
-
-    # Configure docker to use the gcloud command-line tool as a credential helper
-    - run: |
+      run: |
         # Set up docker to authenticate
         # via gcloud command-line tool.
         gcloud auth configure-docker
-    - name: Build the Docker image
+
+    - name: Tag and Push Docker Image
+      if: success()
+      id: push
       run: |
-        docker build . --file Dockerfile.arm --tag gcr.io/ninneman-org/godns-arm:${{ github.sha }}
-        docker tag gcr.io/ninneman-org/godns-arm:${{ github.sha }} gcr.io/ninneman-org/godns-arm:latest
+        docker tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} gcr.io/ninneman-org/godns-arm:latest
         # docker push gcr.io/ninneman-org/godns-arm
