@@ -1,8 +1,5 @@
 FROM arm32v7/golang:1.15
 
-# RUN apk update && apk upgrade && \
-#     apk add --no-cache bash git openssh ca-certificates
-
 COPY . /app
 WORKDIR /app
 
