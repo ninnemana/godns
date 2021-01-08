@@ -61,7 +61,7 @@ jobs:
       matrix:
         platform: [linux/amd64, linux/arm/v7]
         include:
-          - platform: linux/amd
+          - platform: linux/amd64
             image: godns
             dockerfile: Dockerfile
           - platform: linux/arm/v7
