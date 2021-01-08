@@ -80,17 +80,6 @@ jobs:
         echo ::set-output name=docker_platform::${DOCKER_TARGET_PLATFORM}
         echo ::set-output name=docker_image::${DOCKER_REGISTRY}/${DOCKER_IMAGE}
 
-    - name: Build the Docker image
-      if: success()
-      id: build
-      run: |
-        docker buildx build \
-          --platform ${{steps.prepare.outputs.docker_platform}} \
-          --file Dockerfile.arm \
-          --tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} \
-          --output type=image \
-          .
-
     # Configure docker to use the gcloud command-line tool as a credential helper
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -106,9 +95,15 @@ jobs:
         # via gcloud command-line tool.
         gcloud auth configure-docker
 
-    - name: Tag and Push Docker Image
+    - name: Docker Build/Tag/Push
       if: success()
-      id: push
+      id: build
       run: |
+        docker buildx build \
+          --platform ${{steps.prepare.outputs.docker_platform}} \
+          --file Dockerfile.arm \
+          --tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} \
+          --output type=image \
+          .
         docker tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} ${{steps.prepare.outputs.docker_image}}:latest
         # docker push gcr.io/ninneman-org/godns-arm
