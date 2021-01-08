@@ -33,18 +33,11 @@ jobs:
     needs:
       - build
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform: [linux/amd64, linux/arm/v7]
-        include:
-          - platform: linux/amd64
-            image: godns
-            dockerfile: Dockerfile
-          - platform: linux/arm/v7
-            image: godns-arm
-            dockerfile: Dockerfile.arm
     env:
       DOCKER_REGISTRY: gcr.io/ninneman-org
+      DOCKER_IMAGE: godns
+      DOCKER_FILE: Dockerfile
+      DOCKER_TARGET_PLATFORMS: linux/amd64,linux/arm/v7
     steps:
     - uses: actions/checkout@v1
 
@@ -61,9 +54,9 @@ jobs:
       if: success()
       id: prepare
       run: |
-        echo ::set-output name=docker_platform::${{ matrix.platform }}
-        echo ::set-output name=docker_image::${DOCKER_REGISTRY}/${{ matrix.image }}
-        echo ::set-output name=docker_file::${{ matrix.dockerfile }}
+        echo ::set-output name=docker_platforms::${DOCKER_TARGET_PLATFORMS}
+        echo ::set-output name=docker_image::${DOCKER_REGISTRY}/${DOCKER_IMAGE}
+        echo ::set-output name=docker_file::${DOCKER_REGISTRY}/${DOCKER_FILE}
 
     # Configure docker to use the gcloud command-line tool as a credential helper
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
@@ -89,5 +82,5 @@ jobs:
           --file ${{steps.prepare.outputs.docker_file}} \
           --tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} \
           --tag ${{steps.prepare.outputs.docker_image}}:latest \
-          --output type=image,push=true \
+          --push \
           .
