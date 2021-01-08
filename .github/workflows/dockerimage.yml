@@ -1,8 +1,12 @@
 name: Deployment
 
+# on:
+#   push:
+#     branches:
+#       - master
 on:
   push:
-    branches:
+    branches-ignore:
       - master
 
 jobs:
@@ -48,7 +52,7 @@ jobs:
       run: |
         docker build . --file Dockerfile --tag gcr.io/ninneman-org/godns:${{ github.sha }}
         docker tag gcr.io/ninneman-org/godns:${{ github.sha }} gcr.io/ninneman-org/godns:latest
-        docker push gcr.io/ninneman-org/godns
+        # docker push gcr.io/ninneman-org/godns
   arm:
     needs:
       - build
@@ -70,4 +74,4 @@ jobs:
       run: |
         docker build . --file Dockerfile.arm --tag gcr.io/ninneman-org/godns-arm:${{ github.sha }}
         docker tag gcr.io/ninneman-org/godns-arm:${{ github.sha }} gcr.io/ninneman-org/godns-arm:latest
-        docker push gcr.io/ninneman-org/godns-arm
+        # docker push gcr.io/ninneman-org/godns-arm
