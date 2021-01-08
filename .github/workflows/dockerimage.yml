@@ -55,7 +55,7 @@ jobs:
       run: |
         echo ::set-output name=docker_platforms::${DOCKER_TARGET_PLATFORMS}
         echo ::set-output name=docker_image::${DOCKER_REGISTRY}/${DOCKER_IMAGE}
-        echo ::set-output name=docker_file::${DOCKER_REGISTRY}/${DOCKER_FILE}
+        echo ::set-output name=docker_file::${DOCKER_FILE}
 
     # Configure docker to use the gcloud command-line tool as a credential helper
     - uses: google-github-actions/setup-gcloud@master
