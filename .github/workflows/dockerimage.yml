@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        platform: [linux/amd, linux/arm/v7]
+        platform: [linux/amd64, linux/arm/v7]
         include:
           - platform: linux/amd
             image: godns
