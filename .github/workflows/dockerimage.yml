@@ -1,12 +1,8 @@
 name: Publish
 on:
   push:
-    branches-ignore:
+    branches:
       - master
-# on:
-#   push:
-#     branches:
-#       - master
 
 jobs:
   build:
@@ -86,4 +82,5 @@ jobs:
           --file ${{steps.prepare.outputs.docker_file}} \
           --tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} \
           --tag ${{steps.prepare.outputs.docker_image}}:latest \
+          --push \
           .
