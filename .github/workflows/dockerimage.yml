@@ -1,12 +1,8 @@
-name: Deployment
+name: Publish
 
-# on:
-#   push:
-#     branches:
-#       - master
 on:
   push:
-    branches-ignore:
+    branches:
       - master
 
 jobs:
