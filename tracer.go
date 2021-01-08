@@ -4,16 +4,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/exporters/metric/prometheus"
 	"go.opentelemetry.io/otel/exporters/trace/jaeger"
 	"go.opentelemetry.io/otel/label"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-)
-
-// ErrInvalidConfiguration is an error to notify client to provide valid trace report agent or config server
-var (
-	ErrBlankTraceConfiguration = errors.New("no trace report agent, config server, or collector endpoint specified")
 )
 
 // initTracer creates a new trace provider instance and registers it as global trace provider.
