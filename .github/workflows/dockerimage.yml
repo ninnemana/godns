@@ -64,10 +64,14 @@ jobs:
     steps:
     - uses: actions/checkout@v1
 
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
+
     - name: Setup Docker Buildx
-      uses: crazy-max/ghaction-docker-buildx@v1
+      uses: docker/setup-buildx-action@v1
+      id: buildx
       with:
-        version: latest
+        install: true
 
     - name: Prepare Variables
       if: success()
@@ -83,7 +87,8 @@ jobs:
         docker buildx build \
           --platform ${{steps.prepare.outputs.docker_platform}} \
           --file Dockerfile.arm \
-          --tag gcr.io/ninneman-org/godns-arm:${{ github.sha }} \
+          --tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} \
+          --output type=image \
           .
 
     # Configure docker to use the gcloud command-line tool as a credential helper
@@ -105,5 +110,5 @@ jobs:
       if: success()
       id: push
       run: |
-        docker tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} gcr.io/ninneman-org/godns-arm:latest
+        docker tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} ${{steps.prepare.outputs.docker_image}}:latest
         # docker push gcr.io/ninneman-org/godns-arm
