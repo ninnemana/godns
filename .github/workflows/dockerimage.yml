@@ -88,12 +88,14 @@ jobs:
 
     # Configure docker to use the gcloud command-line tool as a credential helper
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      if: success()
-      id: login
       with:
         version: '270.0.0'
         service_account_email: ${{ secrets.GCLOUD_EMAIL }}
         service_account_key: ${{ secrets.GCLOUD_AUTH }}
+
+    - name: Docker Login
+      if: success()
+      id: login
       run: |
         # Set up docker to authenticate
         # via gcloud command-line tool.
