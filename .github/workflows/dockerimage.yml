@@ -59,9 +59,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        image: ['godns', godns-arm]
-        platform: ['linux/amd', 'linux/arm/v7']
-        dockerfile: ['Dockerfile', 'Dockerfile.arm']
+        platform: [linux/amd, linux/arm/v7]
+        include:
+          - platform: linux/amd
+            image: godns
+            dockerfile: Dockerfile
+          - platform: linux/arm/v7
+            image: godns-arm
+            dockerfile: Dockerfile.arm
     env:
       DOCKER_REGISTRY: gcr.io/ninneman-org
     steps:
