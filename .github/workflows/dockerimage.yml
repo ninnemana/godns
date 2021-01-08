@@ -103,7 +103,6 @@ jobs:
           --platform ${{steps.prepare.outputs.docker_platform}} \
           --file Dockerfile.arm \
           --tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} \
-          --output type=image \
+          --tag ${{steps.prepare.outputs.docker_image}}:latest \
+          --output type=image,push=true \
           .
-        docker tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} ${{steps.prepare.outputs.docker_image}}:latest
-        # docker push gcr.io/ninneman-org/godns-arm
