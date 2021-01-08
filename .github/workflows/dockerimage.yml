@@ -1,5 +1,4 @@
 name: Publish
-
 on:
   push:
     branches:
@@ -59,11 +58,12 @@ jobs:
         echo ::set-output name=docker_file::${DOCKER_REGISTRY}/${DOCKER_FILE}
 
     # Configure docker to use the gcloud command-line tool as a credential helper
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         version: '270.0.0'
         service_account_email: ${{ secrets.GCLOUD_EMAIL }}
         service_account_key: ${{ secrets.GCLOUD_AUTH }}
+        export_default_credentials: true
 
     - name: Docker Login
       if: success()
@@ -78,7 +78,7 @@ jobs:
       id: build
       run: |
         docker buildx build \
-          --platform ${{steps.prepare.outputs.docker_platform}} \
+          --platform ${{steps.prepare.outputs.docker_platforms}} \
           --file ${{steps.prepare.outputs.docker_file}} \
           --tag ${{steps.prepare.outputs.docker_image}}:${{ github.sha }} \
           --tag ${{steps.prepare.outputs.docker_image}}:latest \
