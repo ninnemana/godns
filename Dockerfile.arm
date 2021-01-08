@@ -10,4 +10,4 @@ ENV GO111MODULE=on
 RUN go mod download
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 go build -o /godns .
-RUN ls /
+
