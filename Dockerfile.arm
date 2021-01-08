@@ -15,7 +15,7 @@ FROM arm32v7/alpine
 
 COPY --from=builder /godns /godns
 
-RUN ls -l /
+RUN ls /
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /etc/passwd /etc/passwd
