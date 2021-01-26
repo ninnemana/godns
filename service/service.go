@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/unit"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
 
@@ -153,18 +154,22 @@ func (s *Service) execute(ctx context.Context) (err error) {
 		return err
 	}
 
+	grp, _ := errgroup.WithContext(ctx)
 	for _, host := range s.config.Hosts {
-		if err := s.updateHost(ctx, host, ip); err != nil {
-			s.log.Error(
-				ctx,
-				"failed to update host",
-				zap.Error(err),
-				zap.String("host", host.Host),
-			)
-		}
+		grp.Go(func() error {
+			if err := s.updateHost(ctx, host, ip); err != nil {
+				s.log.Error(
+					ctx,
+					"failed to update host",
+					zap.Error(err),
+					zap.String("host", host.Host),
+				)
+			}
+			return err
+		})
 	}
 
-	return nil
+	return grp.Wait()
 }
 
 func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {

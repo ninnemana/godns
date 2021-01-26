@@ -36,7 +36,7 @@ jobs:
       DOCKER_REGISTRY: gcr.io/ninneman-org
       DOCKER_IMAGE: godns
       DOCKER_FILE: Dockerfile
-      DOCKER_TARGET_PLATFORMS: linux/amd64,linux/arm/v7
+      DOCKER_TARGET_PLATFORMS: linux/amd64,linux/arm/v7,linux/arm64
     steps:
     - uses: actions/checkout@v1
 
