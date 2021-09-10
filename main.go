@@ -43,9 +43,12 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to start tracer", zap.Error(err))
 	}
-	defer flush()
+	defer func() {
+		_ = flush(context.Background())
+	}()
 
-	if err := initMeter(); err != nil {
+	logger.Info("starting metric collector", zap.String("service", "godns"), zap.String("port", *promPort))
+	if err := initMeter("godns", *promPort); err != nil {
 		logger.Fatal("failed to start metric meter", zap.Error(err))
 	}
 

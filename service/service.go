@@ -14,9 +14,10 @@ import (
 	"github.com/ninnemana/godns/log"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/unit"
+	"go.opentelemetry.io/otel/metric/global"
+	"go.opentelemetry.io/otel/metric/unit"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
@@ -29,7 +30,7 @@ const (
 
 var (
 	tracer = otel.Tracer(serviceName)
-	meter  = otel.GetMeterProvider().Meter(serviceName)
+	meter  = global.GetMeterProvider().Meter(serviceName)
 )
 
 type Config struct {
@@ -48,7 +49,7 @@ type Service struct {
 	client *http.Client
 	log    *log.Contextual
 
-	latency metric.Float64ValueRecorder
+	latency metric.Float64Histogram
 	count   metric.Int64Counter
 	errors  metric.Int64Counter
 }
@@ -67,7 +68,7 @@ func New(configFile string, l *log.Contextual) (*Service, error) {
 		return nil, errors.Wrap(err, "failed to read config file")
 	}
 
-	latency, err := meter.NewFloat64ValueRecorder(
+	latency, err := meter.NewFloat64Histogram(
 		"operation_latency",
 		metric.WithDescription("Latency when the service is ran"),
 		metric.WithUnit(unit.Milliseconds),
@@ -209,7 +210,7 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 		return errors.Wrap(err, "failed to make request to Dynamic DNS Service")
 	}
 
-	span.SetAttributes(label.Int("statusCode", resp.StatusCode))
+	span.SetAttributes(attribute.Int("statusCode", resp.StatusCode))
 
 	if resp.StatusCode >= http.StatusMultipleChoices {
 		s.log.Error(ctx, "failed to make request to DNS service", zap.Error(err))
