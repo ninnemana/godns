@@ -42,18 +42,6 @@ func (c *Contextual) trace(ctx context.Context, msg string, fields ...zap.Field)
 	var attrs []attribute.KeyValue
 	for _, field := range fields {
 		switch field.Type {
-		case zapcore.NamespaceType:
-			attrs = append(attrs, attribute.Any(field.Key, field.Interface))
-		case zapcore.UnknownType:
-			attrs = append(attrs, attribute.Any(field.Key, field.Interface))
-		case zapcore.SkipType:
-			attrs = append(attrs, attribute.Any(field.Key, field.Interface))
-		case zapcore.ArrayMarshalerType:
-			attrs = append(attrs, attribute.Any(field.Key, field.Interface))
-		case zapcore.ObjectMarshalerType:
-			attrs = append(attrs, attribute.Any(field.Key, field.Interface))
-		case zapcore.BinaryType:
-			attrs = append(attrs, attribute.Any(field.Key, field.Interface))
 		case zapcore.BoolType:
 			attrs = append(attrs, attribute.Bool(field.Key, field.Integer == 1))
 		case zapcore.ByteStringType:
