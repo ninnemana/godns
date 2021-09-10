@@ -39,7 +39,7 @@ func initMeter() error {
 
 	http.HandleFunc("/", exporter.ServeHTTP)
 	go func() {
-		_ = http.ListenAndServe(":2222", nil)
+		_ = http.ListenAndServe(":"+*promPort, nil)
 	}()
 
 	return nil
