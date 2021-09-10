@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -49,10 +50,6 @@ func (c *Contextual) trace(ctx context.Context, msg string, fields ...zap.Field)
 			if ok {
 				attrs = append(attrs, attribute.String(field.Key, string(bits)))
 			}
-		case zapcore.Complex128Type:
-			attrs = append(attrs, attribute.Any(field.Key, field.Interface))
-		case zapcore.Complex64Type:
-			attrs = append(attrs, attribute.Any(field.Key, field.Interface))
 		case zapcore.DurationType:
 			attrs = append(attrs, attribute.String(field.Key, time.Duration(field.Integer).String()))
 		case zapcore.Float64Type:
@@ -79,10 +76,8 @@ func (c *Contextual) trace(ctx context.Context, msg string, fields ...zap.Field)
 			if err == nil {
 				attrs = append(attrs, attribute.String(field.Key, t.String()))
 			}
-		case zapcore.ReflectType:
-			attrs = append(attrs, attribute.Any(field.Key, field.Interface))
 		case zapcore.StringerType:
-			attrs = append(attrs, attribute.Any(field.Key, field.Interface))
+			attrs = append(attrs, attribute.String(field.Key, field.Interface.(fmt.Stringer).String()))
 		case zapcore.ErrorType:
 			span.RecordError(field.Interface.(error))
 		}
