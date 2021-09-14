@@ -156,7 +156,8 @@ func (s *Service) execute(ctx context.Context) (err error) {
 	}
 
 	grp, _ := errgroup.WithContext(ctx)
-	for _, host := range s.config.Hosts {
+	for _, h := range s.config.Hosts {
+		host := h
 		grp.Go(func() error {
 			if err := s.updateHost(ctx, host, ip); err != nil {
 				s.log.Error(
