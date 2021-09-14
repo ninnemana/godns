@@ -6,9 +6,11 @@ import (
 	"net/http"
 
 	prom "github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric/global"
+	"go.opentelemetry.io/otel/propagation"
 	export "go.opentelemetry.io/otel/sdk/export/metric"
 	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
 	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
@@ -36,6 +38,15 @@ func initTracer(serviceName string) (func(context.Context) error, error) {
 		)),
 		tracesdk.WithSampler(sdktrace.AlwaysSample()),
 	)
+
+	otel.SetTextMapPropagator(
+		propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{},
+			propagation.Baggage{},
+		),
+	)
+	otel.SetTracerProvider(tp)
+
 	return tp.Shutdown, nil
 }
 
