@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ninnemana/godns/log"
+	"github.com/ninnemana/tracelog"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/metric/unit"
@@ -47,7 +47,7 @@ type Host struct {
 type Service struct {
 	config Config
 	client *http.Client
-	log    *log.Contextual
+	log    *tracelog.TraceLogger
 
 	latency metric.Float64Histogram
 	count   metric.Int64Counter
@@ -56,7 +56,7 @@ type Service struct {
 
 // New validates that the required system settings
 // have been configured for the service to run.
-func New(configFile string, l *log.Contextual) (*Service, error) {
+func New(configFile string, l *tracelog.TraceLogger) (*Service, error) {
 	// parse the config file
 	file, err := os.Open(configFile)
 	if err != nil {
@@ -111,17 +111,20 @@ func New(configFile string, l *log.Contextual) (*Service, error) {
 }
 
 func (s *Service) Run(ctx context.Context) error {
-	s.log.Debug("running on interval", zap.Duration("interval", s.config.Interval))
+	log := s.log.SetContext(ctx)
+
+	log.Debug("running on interval", zap.Duration("interval", s.config.Interval))
 
 	c := time.NewTicker(s.config.Interval)
 
 	for {
 		ctx, span := tracer.Start(ctx, "service.Run")
+		log = log.SetContext(ctx)
 
-		s.log.Info(ctx, "Checking DNS Mappings")
+		log.Info("Checking DNS Mappings")
 
 		if err := s.execute(ctx); err != nil {
-			s.log.Error(ctx, "failed to run DNS check", zap.Error(err))
+			log.Error("failed to run DNS check", zap.Error(err))
 		}
 
 		span.End()
@@ -132,6 +135,8 @@ func (s *Service) Run(ctx context.Context) error {
 func (s *Service) execute(ctx context.Context) (err error) {
 	s.count.Add(ctx, 1)
 	ctx, span := tracer.Start(ctx, "service.execute")
+
+	log := s.log.SetContext(ctx)
 
 	start := time.Now()
 
@@ -150,35 +155,43 @@ func (s *Service) execute(ctx context.Context) (err error) {
 	ip, err = externalIP(ctx)
 	if err != nil {
 		err := fmt.Errorf("failed to get local IP address: %w", err)
-		s.log.Error(ctx, "failed to get local IP address", zap.Error(err))
+		log.Error("failed to get local IP address", zap.Error(err))
 
 		return err
 	}
 
 	grp, _ := errgroup.WithContext(ctx)
+
 	for _, h := range s.config.Hosts {
 		host := h
+
 		grp.Go(func() error {
 			if err := s.updateHost(ctx, host, ip); err != nil {
-				s.log.Error(
-					ctx,
+				log.Error(
 					"failed to update host",
 					zap.Error(err),
 					zap.String("host", host.Host),
 				)
 			}
+
 			return err
 		})
 	}
 
-	return grp.Wait()
+	if err := grp.Wait(); err != nil {
+		return fmt.Errorf("host updates failed: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 	ctx, span := tracer.Start(ctx, "service.update")
 	defer span.End()
 
-	s.log.Info(ctx, "updating host", zap.String("host", host.Host), zap.String("ip", ip))
+	log := s.log.SetContext(ctx)
+
+	log.Info("updating host", zap.String("host", host.Host), zap.String("ip", ip))
 
 	// set the request parameters
 	q := url.Values{}
@@ -191,7 +204,7 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 		nil,
 	)
 	if err != nil {
-		s.log.Error(ctx, "failed to create request", zap.Error(err))
+		log.Error("failed to create request", zap.Error(err))
 
 		return errors.Wrap(err, "failed to create request")
 	}
@@ -204,17 +217,17 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", auth))
 	req.Header.Add("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)")
 
-	resp, err := s.client.Do(req.WithContext(ctx))
+	resp, err := s.client.Do(log.WithRequest(ctx, req))
 	if err != nil {
-		s.log.Error(ctx, "failed to make request to DNS service", zap.Error(err))
+		log.Error("failed to make request to DNS service", zap.Error(err))
 
 		return errors.Wrap(err, "failed to make request to Dynamic DNS Service")
 	}
 
-	span.SetAttributes(attribute.Int("statusCode", resp.StatusCode))
+	span.SetAttributes(otelhttptrace.HTTPStatus.Int(resp.StatusCode))
 
 	if resp.StatusCode >= http.StatusMultipleChoices {
-		s.log.Error(ctx, "failed to make request to DNS service", zap.Error(err))
+		log.Error("failed to make request to DNS service", zap.Error(err))
 
 		return errors.Errorf("failed to query Dynamic DNS Service, received '%d'", resp.StatusCode)
 	}
@@ -227,18 +240,18 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 	if err != nil {
 		const msg = "failed to decode result from Dynamic DNS Service"
 
-		s.log.Error(ctx, msg, zap.Error(err))
+		log.Error(msg, zap.Error(err))
 
 		return errors.Wrap(err, msg)
 	}
 
 	switch {
 	case strings.Contains(string(data), "good"):
-		s.log.Info(ctx, "change was successfully applied", zap.String("host", host.Host), zap.String("ip", ip))
+		log.Info("change was successfully applied", zap.String("host", host.Host), zap.String("ip", ip))
 	case strings.Contains(string(data), "nochg"):
-		s.log.Info(ctx, "no change was recorded", zap.String("host", host.Host), zap.String("ip", ip))
+		log.Info("no change was recorded", zap.String("host", host.Host), zap.String("ip", ip))
 	default:
-		s.log.Error(ctx, "received error from Dynamic DNS service", zap.Error(errors.Wrap(errDNSUpdate, string(data))))
+		log.Error("received error from Dynamic DNS service", zap.Error(errors.Wrap(errDNSUpdate, string(data))))
 
 		return errors.Wrap(errDNSUpdate, string(data))
 	}
@@ -246,9 +259,7 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 	return nil
 }
 
-var (
-	errDNSUpdate = fmt.Errorf("received error code from Dynamic DNS service")
-)
+var errDNSUpdate = fmt.Errorf("received error code from Dynamic DNS service")
 
 func sinceInMilliseconds(s time.Time) float64 {
 	return float64(time.Since(s).Nanoseconds()) / 1e6
