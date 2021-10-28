@@ -5,8 +5,8 @@ import (
 	"flag"
 	"log"
 
-	clog "github.com/ninnemana/godns/log"
 	"github.com/ninnemana/godns/service"
+	"github.com/ninnemana/tracelog"
 	"go.uber.org/zap"
 )
 
@@ -19,6 +19,7 @@ var (
 
 func main() {
 	flag.Parse()
+
 	if configFile == nil || *configFile == "" {
 		log.Fatal("invalid config file")
 	}
@@ -52,9 +53,7 @@ func main() {
 		logger.Fatal("failed to start metric meter", zap.Error(err))
 	}
 
-	svc, err := service.New(*configFile, &clog.Contextual{
-		Logger: logger,
-	})
+	svc, err := service.New(*configFile, tracelog.NewLogger(tracelog.WithLogger(logger)))
 	if err != nil {
 		logger.Fatal("failed to create service", zap.Error(err))
 	}
