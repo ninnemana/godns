@@ -5,6 +5,10 @@ import (
 	"flag"
 	"log"
 
+	"go.opentelemetry.io/otel"
+
+	"go.opentelemetry.io/otel/metric/global"
+
 	"github.com/ninnemana/godns/service"
 	"github.com/ninnemana/tracelog"
 	"go.uber.org/zap"
@@ -15,6 +19,7 @@ var (
 	promPort   = flag.String("metric-port", "9090", "indicates the port for Prometheus metrics to be served")
 
 	defaultPort = "9090"
+	serviceName = "godns"
 )
 
 func main() {
@@ -40,7 +45,7 @@ func main() {
 		promPort = &defaultPort
 	}
 
-	flush, err := initTracer("godns")
+	flush, err := initTracer(serviceName)
 	if err != nil {
 		logger.Fatal("failed to start tracer", zap.Error(err))
 	}
@@ -48,12 +53,17 @@ func main() {
 		_ = flush(context.Background())
 	}()
 
-	logger.Info("starting metric collector", zap.String("service", "godns"), zap.String("port", *promPort))
-	if err := initMeter("godns", *promPort); err != nil {
+	logger.Info("starting metric collector", zap.String("service", serviceName), zap.String("port", *promPort))
+	if err := initMeter(serviceName, *promPort); err != nil {
 		logger.Fatal("failed to start metric meter", zap.Error(err))
 	}
 
-	svc, err := service.New(*configFile, tracelog.NewLogger(tracelog.WithLogger(logger)))
+	svc, err := service.New(
+		service.WithLogger(tracelog.NewLogger(tracelog.WithLogger(logger))),
+		service.WithMeter(global.GetMeterProvider().Meter(serviceName)),
+		service.WithTracer(otel.Tracer(serviceName)),
+		service.WithConfig(*configFile),
+	)
 	if err != nil {
 		logger.Fatal("failed to create service", zap.Error(err))
 	}
