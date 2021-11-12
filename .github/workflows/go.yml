@@ -1,5 +1,6 @@
 name: WIP
 on:
+  pull_request:
   push:
     branches-ignore:
       - master
@@ -26,4 +27,11 @@ jobs:
       run: |
         go get -v -t -d ./...
 
-    - run: go test ./...
+    - run: go test -race -covermode atomic -coverprofile=covprofile ./...
+
+    - name: Install goveralls
+      run: go install github.com/mattn/goveralls@latest
+    - name: Send coverage
+      env:
+        COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: goveralls -coverprofile=covprofile -service=github
