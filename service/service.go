@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ninnemana/tracelog"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/metric/unit"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -24,13 +24,7 @@ import (
 )
 
 const (
-	serviceName = "godns"
 	httpTimeout = time.Second * 5
-)
-
-var (
-	tracer = otel.Tracer(serviceName)
-	meter  = global.GetMeterProvider().Meter(serviceName)
 )
 
 type Config struct {
@@ -48,66 +42,132 @@ type Service struct {
 	config Config
 	client *http.Client
 	log    *tracelog.TraceLogger
+	tracer trace.Tracer
+	meter  metric.Meter
 
-	latency metric.Float64Histogram
-	count   metric.Int64Counter
-	errors  metric.Int64Counter
+	latency  metric.Float64Histogram
+	count    metric.Int64Counter
+	errors   metric.Int64Counter
+	endpoint string
+}
+
+type Option func(*Service) error
+
+var ErrInvalidService = errors.New("invalid service definition")
+
+// WithEndpoint defines the HTTP address to be called when the service
+// is attempting to update the DNS configuration.
+func WithEndpoint(addr string) Option {
+	return func(svc *Service) error {
+		if svc == nil {
+			return ErrInvalidService
+		}
+
+		svc.endpoint = addr
+
+		return nil
+	}
+}
+
+func WithLogger(l *tracelog.TraceLogger) Option {
+	return func(svc *Service) error {
+		if svc == nil {
+			return ErrInvalidService
+		}
+
+		svc.log = l
+
+		return nil
+	}
+}
+
+func WithTracer(tr trace.Tracer) Option {
+	return func(svc *Service) error {
+		if svc == nil {
+			return ErrInvalidService
+		}
+
+		svc.tracer = tr
+
+		return nil
+	}
+}
+
+func WithMeter(meter metric.Meter) Option {
+	return func(svc *Service) error {
+		svc.meter = meter
+		var err error
+
+		svc.latency, err = svc.meter.NewFloat64Histogram(
+			"operation_latency",
+			metric.WithDescription("Latency when the service is ran"),
+			metric.WithUnit(unit.Milliseconds),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create operation latency metric: %w", err)
+		}
+
+		svc.count, err = svc.meter.NewInt64Counter(
+			"operation_count",
+			metric.WithDescription("Number of times the service is ran"),
+			metric.WithUnit(unit.Dimensionless),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create operation count metric: %w", err)
+		}
+
+		svc.errors, err = svc.meter.NewInt64Counter(
+			"operation_count",
+			metric.WithDescription("Number of times the service encounters an error"),
+			metric.WithUnit(unit.Dimensionless),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create operation error count metric: %w", err)
+		}
+
+		return nil
+	}
+}
+
+func WithConfig(path string) Option {
+	return func(svc *Service) error {
+		// parse the config file
+		file, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("failed to open config file: %w", err)
+		}
+
+		if err := yaml.NewDecoder(file).Decode(&svc.config); err != nil {
+			return fmt.Errorf("failed to read config file: %w", err)
+		}
+
+		return nil
+	}
 }
 
 // New validates that the required system settings
 // have been configured for the service to run.
-func New(configFile string, l *tracelog.TraceLogger) (*Service, error) {
-	// parse the config file
-	file, err := os.Open(configFile)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to open config file")
-	}
-
-	var config Config
-	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
-		return nil, errors.Wrap(err, "failed to read config file")
-	}
-
-	latency, err := meter.NewFloat64Histogram(
-		"operation_latency",
-		metric.WithDescription("Latency when the service is ran"),
-		metric.WithUnit(unit.Milliseconds),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create operation latency metric: %w", err)
-	}
-
-	count, err := meter.NewInt64Counter(
-		"operation_count",
-		metric.WithDescription("Number of times the service is ran"),
-		metric.WithUnit(unit.Dimensionless),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create operation count metric: %w", err)
-	}
-
-	errRecorder, err := meter.NewInt64Counter(
-		"operation_count",
-		metric.WithDescription("Number of times the service encounters an error"),
-		metric.WithUnit(unit.Dimensionless),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create operation error count metric: %w", err)
-	}
-
-	return &Service{
-		count:   count,
-		errors:  errRecorder,
-		latency: latency,
-		config:  config,
+func New(options ...Option) (*Service, error) {
+	svc := &Service{
+		config:   Config{},
+		endpoint: "https://domains.google.com/nic/update",
+		tracer:   trace.NewNoopTracerProvider().Tracer("service"),
+		meter:    metric.NoopMeterProvider{}.Meter("service"),
 		client: &http.Client{
 			Transport:     http.DefaultClient.Transport,
 			CheckRedirect: http.DefaultClient.CheckRedirect,
 			Jar:           http.DefaultClient.Jar,
 			Timeout:       httpTimeout,
 		},
-		log: l,
-	}, nil
+	}
+
+	for _, opt := range options {
+		if err := opt(svc); err != nil {
+			return nil, err
+		}
+	}
+
+	return svc, nil
 }
 
 func (s *Service) Run(ctx context.Context) error {
@@ -118,7 +178,7 @@ func (s *Service) Run(ctx context.Context) error {
 	c := time.NewTicker(s.config.Interval)
 
 	for {
-		ctx, span := tracer.Start(ctx, "service.Run")
+		ctx, span := s.tracer.Start(ctx, "service.Run")
 		log = log.SetContext(ctx)
 
 		log.Info("Checking DNS Mappings")
@@ -128,13 +188,17 @@ func (s *Service) Run(ctx context.Context) error {
 		}
 
 		span.End()
-		<-c.C
+		select {
+		case <-c.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 
 func (s *Service) execute(ctx context.Context) (err error) {
 	s.count.Add(ctx, 1)
-	ctx, span := tracer.Start(ctx, "service.execute")
+	ctx, span := s.tracer.Start(ctx, "service.execute")
 
 	log := s.log.SetContext(ctx)
 
@@ -186,7 +250,7 @@ func (s *Service) execute(ctx context.Context) (err error) {
 }
 
 func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
-	ctx, span := tracer.Start(ctx, "service.update")
+	ctx, span := s.tracer.Start(ctx, "service.update")
 	defer span.End()
 
 	log := s.log.SetContext(ctx)
@@ -200,7 +264,7 @@ func (s *Service) updateHost(ctx context.Context, host Host, ip string) error {
 
 	req, err := http.NewRequest(
 		http.MethodGet,
-		"https://domains.google.com/nic/update",
+		s.endpoint,
 		nil,
 	)
 	if err != nil {
